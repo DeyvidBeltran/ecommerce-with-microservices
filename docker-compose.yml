@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+
+  # ─── Base de datos de productos ───────────────────────────
+  products-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: products_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - products_db_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-net
+
+  # ─── Base de datos de órdenes ─────────────────────────────
+  orders-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - orders_db_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-net
+
+  # ─── Microservicio de productos ───────────────────────────
+  products-service:
+    build:
+      context: ./products-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3001
+      DB_HOST: products-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: products_db
+    ports:
+      - "3001:3001"
+    depends_on:
+      - products-db
+    networks:
+      - ecommerce-net
+
+  # ─── Microservicio de órdenes ─────────────────────────────
+  orders-service:
+    build:
+      context: ./orders-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      DB_HOST: orders-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: orders_db
+      PRODUCTS_SERVICE_URL: http://products-service:3001
+    ports:
+      - "3002:3002"
+    depends_on:
+      - orders-db
+      - products-service
+    networks:
+      - ecommerce-net
+
+  # ─── API Gateway ──────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3000
+      PRODUCTS_SERVICE_URL: http://products-service:3001
+      ORDERS_SERVICE_URL: http://orders-service:3002
+    ports:
+      - "3000:3000"
+    depends_on:
+      - products-service
+      - orders-service
+    networks:
+      - ecommerce-net
+
+volumes:
+  products_db_data:
+  orders_db_data:
+
+networks:
+  ecommerce-net:
+    driver: bridge
